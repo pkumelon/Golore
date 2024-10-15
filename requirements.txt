@@ -1,0 +1,15 @@
+torch
+transformers
+tokenizers
+datasets
+peft
+wandb
+loguru
+nvitop
+matplotlib
+pybind11
+bitsandbytes
+scipy
+evaluate
+packaging
+ninja

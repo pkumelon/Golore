@@ -1,0 +1,17 @@
+python run_glue.py \
+    --model_name_or_path roberta-base \
+    --task_name mrpc \
+    --lora_all_modules \
+    --max_length 512 \
+    --seed 42 \
+    --lora_r 4 \
+    --scale 4 \
+    --per_device_train_batch_size 16 \
+    --update_proj_gap 500 \
+    --num_train_epochs 30 \
+    --output_dir ./results/ft/roberta_base/mrpc \
+    --learning_rate 3e-5 \
+    --with_tracking \
+    --report_to wandb \
+    --enable_golore \
+    --rand_ratio 0.8 \

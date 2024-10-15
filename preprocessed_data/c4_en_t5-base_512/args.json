@@ -1,0 +1,10 @@
+{
+    "tokenizer": "t5-base",
+    "dataset": "c4",
+    "dataset_config": "en",
+    "text_field": "text",
+    "sequence_length": 512,
+    "num_cpu": 48,
+    "save_dir": "./preprocessed_data",
+    "take": null
+}
