@@ -127,7 +127,7 @@ python run_glue.py \
     # --report_to wandb \
 ```
 
-## Benchmark 3: Fine-Tuning Llama-2-7b on GSM8k dataset
+## Benchmark 3: Fine-Tuning Llama-2-7b on WinoGrande dataset
 
 This part is based on the [zo-bench](https://github.com/ZO-Bench/ZO-LLM?tab=readme-ov-file).
 
