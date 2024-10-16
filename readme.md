@@ -1,14 +1,17 @@
 # Golore
 
-This is the implementation for paper ???.
+This is the implementation for paper [Subspace Optimization for Large Language Models with Convergence Guarantees](http://arxiv.org/abs/2410.11289).
 
-In this paper, we unexpectedly discover that GaLore does not always converge to the optimal solution, and we substantiate this finding with an explicit counterexample. Contrary to expectations, our investigation reveals that GaLore does **not** converge to stationary solutions under standard assumptions. Furthermore, our results show that regardless of whether AdamW or MSGD is employed as the subspace optimizer, GaLore fails to converge to the desired solution. In contrast, both GoLore and large-batch GaLore, along with full-parameter training, achieve exact convergence, thereby validating our theoretical results. 
+<!-- In this paper, we unexpectedly discover that GaLore does not always converge to the optimal solution, and we substantiate this finding with an explicit counterexample. Contrary to expectations, our investigation reveals that GaLore does **not** converge to stationary solutions under standard assumptions. Furthermore, our results show that regardless of whether AdamW or MSGD is employed as the subspace optimizer, GaLore fails to converge to the desired solution. In contrast, both GoLore and large-batch GaLore, along with full-parameter training, achieve exact convergence, thereby validating our theoretical results.  -->
+In this paper, we proved that GaLore does not converge under standard assumptions because the SVD-based projection will lead to noise-dominated subspaces when the true gradient is relatively small. 
+![Illustration](imgs/Illustration.png)
 
-And then, we introduce GoLore (Gradient random Low-rank projection), a novel variant of GaLore that provably converges in stochastic settings, even with standard batch sizes.
 
+<!-- And then, we introduce GoLore (Gradient random Low-rank projection), a novel variant of GaLore that provably converges in stochastic settings, even with standard batch sizes. -->
+Besides, we prove that GaLore can converge with deterministic or large-batch stochastic gradients, where the gradients used for computing the projection matrix are not noise-dominated. To guarantee convergence with small-batch stochastic gradients, we propose GoLore that uses random projection matrix sampled from a uniform distribution on the Stiefel manifold.
 ![non-convergence_loss](imgs/non-convergence_loss.png)
 
-![Illustration](imgs/Illustration.png)
+Experiments on both pre-training and fine-tuning LLMs have shown that using GoLore in the late training stages can achieve better performance than GaLore.
 
 ![pt_loss](imgs/pt_loss.png)
 
@@ -183,4 +186,10 @@ The parameter `T` and `grad_accumulation` determine the frequency with which we 
 ## Citation
 
 ```bibtex
+@article{he2024subspace,
+  title={Subspace Optimization for Large Language Models with Convergence Guarantees},
+  author={He, Yutong and Li, Pengrui and Hu, Yipeng and Chen, Chuyan and Yuan, Kun},
+  journal={arXiv preprint arXiv:2410.11289},
+  year={2024}
+}
 ```
