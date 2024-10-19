@@ -4,6 +4,7 @@ Distributed training code for ReLoRA.
 import os
 
 import peft_pretraining.GoLore
+import peft_pretraining.relora
 os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 import sys
 import yaml
@@ -662,7 +663,7 @@ def main(args):
         "weight_decay": args.weight_decay,
         "betas": (args.adam_beta1, args.adam_beta2),
     }
-    if 'lore' in args.optimizer.lower():
+    if 'lore' in args.optimizer.lower() or 'fira' in args.optimizer.lower():
         # make parameters with "rank" to a single group, if param_name has "mlp" or "attn"
         galore_params = []
         target_modules_list = ["attn", "attention", "mlp"]
@@ -723,6 +724,10 @@ def main(args):
     elif args.optimizer.lower() == "golore_sgd":
         from peft_pretraining.golore_torch.sgd import SGD
         optimizer = SGD(param_groups, lr=args.lr, weight_decay=args.weight_decay, momentum = momentum, dampening = dampening)
+    elif args.optimizer.lower() == "fira_adamw":
+        from peft_pretraining.fira.fira_adamw import AdamW
+        optimizer = AdamW(param_groups, lr=args.lr, weight_decay=args.weight_decay)
+
     else:
         raise ValueError(f"Optimizer {args.optimizer} not supported")
 
@@ -790,6 +795,9 @@ def main(args):
     # we assert above that the dataset is large enough to train for num_training_steps, so no need for epochs
     # ##############################
 
+    unwrapped_model = model
+    if args.distributed_type == "ddp": model = model.module
+
     prof = maybe_make_profiler(args)
 
     logger.info(f"Starting training at update step {update_step} with {args.num_training_steps - update_step} update steps")
@@ -824,10 +832,10 @@ def main(args):
             print(f"Rank {global_rank} stopping training.")
             break
         
-        if isinstance(model.module, ReLoRaModel):
+        if args.use_peft and isinstance(unwrapped_model, ReLoRaModel):
             reset_relora = update_step % args.update_proj_gap == 0
-            if isinstance(model.module, peft_pretraining.GoLore.ReLoRaModel):
-                model.module._config.forward_type = reset_relora
+            if isinstance(unwrapped_model, peft_pretraining.GoLore.ReLoRaModel):
+                unwrapped_model._config.forward_type = reset_relora
 
         batch = {k: v.to(device) for k, v in batch.items()}
         tokens_seen += batch["input_ids"].numel() * world_size
@@ -861,18 +869,17 @@ def main(args):
 
         # restart model after we modify the learning rate, so on the next step after the relora frequency
         # print(update_step, reset_relora)
-        if isinstance(model.module, ReLoRaModel) and reset_relora:
+        if args.use_peft and isinstance(unwrapped_model, ReLoRaModel) and reset_relora:
             _lora_reset_time = time.time()
             # logger.info(f"{args.resume_from=}, {local_step=}, {args.relora=}, thresh: {local_step // args.gradient_accumulation}")
             logger.info(f"Performing lora reset at update step {update_step}. Current lr is {optimizer.param_groups[0]['lr']}")
             n_lora_restarts += 1
 
-            if args.distributed_type == "ddp":
-                if isinstance(model.module, peft_pretraining.GoLore.ReLoRaModel):
-                    use_rand = update_step / args.num_training_steps >= args.rand_ratio
-                    model.module.merge_and_reinit(optimizer, use_rand)
-                else:
-                    model.module.merge_and_reinit()
+            if isinstance(unwrapped_model, peft_pretraining.GoLore.ReLoRaModel):
+                use_rand = update_step / args.num_training_steps >= args.rand_ratio
+                unwrapped_model.merge_and_reinit(optimizer, use_rand)
+            else:
+                unwrapped_model.merge_and_reinit()
 
             
             _lora_reset_time = time.time() - _lora_reset_time
