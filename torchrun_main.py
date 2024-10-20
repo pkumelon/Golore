@@ -796,7 +796,7 @@ def main(args):
     # ##############################
 
     unwrapped_model = model
-    if args.distributed_type == "ddp": model = model.module
+    if args.distributed_type == "ddp": unwrapped_model = model.module
 
     prof = maybe_make_profiler(args)
 
