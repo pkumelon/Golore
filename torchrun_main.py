@@ -2,10 +2,10 @@
 Distributed training code for ReLoRA.
 """
 import os
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 
 import peft_pretraining.GoLore
 import peft_pretraining.relora
-os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 import sys
 import yaml
 import time
@@ -72,11 +72,7 @@ def parse_args(args=None):
     parser.add_argument("--load_optimizer_state_on_resume", default=True, type=lambda x: x.lower() == "true",
                         help="Load optimizer state from the checkpoint when resuming training. "
                              "If False, optimizer state will be initialized from scratch. Setting it to False is useful for some very specific experiments.")
-
-    parser.add_argument("--dataset_path", type=str, default=None, help="Path to a huggingface dataset directory")
     parser.add_argument("--base_dir", type=str, default=None, help="Path to a local dataset directory")
-    parser.add_argument("--megatron_dataset_config", type=str, default=None,
-                        help="Path to a megatron dataset config file. Only one of --dataset_path and --megatron_dataset_config should be provided.")
     parser.add_argument("--max_length", type=int, default=512)
 
     parser.add_argument("--batch_size", type=int, default=None)
@@ -410,63 +406,23 @@ def main(args):
     for k, v in vars(args).items():
         logger.info(f"{k:30} {v}")
     logger.info("*" * 40)
-    if args.dataset_path is not None:
-        logger.info("All good! Loading tokenizer now")
-        ##############################
-        # tokenizer = AutoTokenizer.from_pretrained(
-        #     dataset_preprocessing_args["tokenizer"],
-        #     model_max_length=args.max_length,
-        # )
-        tokenizer = AutoTokenizer.from_pretrained("t5-base", model_max_length=args.max_length)
-        pad_idx = tokenizer.pad_token_id
-        logger.info("Tokenizer loaded")
 
-        logger.info("Loading Huggingface dataset from directory")
-        # dataset_dict = datasets.load_from_disk(args.dataset_path)
-        seed_for_shuffle = 42 
-        base_dir = args.base_dir
-        dataset_dict = datasets.load_dataset('json', 
-                                data_files = {'train' : [f'c4-train.0{idx:04d}-of-01024.json.gz' for idx in range(1024)],
-                                                'validation' : [f'c4-validation.0{idx:04d}-of-00008.json.gz' for idx in range(8)]},
-                            data_dir = base_dir, streaming = True)
-        train_dataset: datasets.Dataset = dataset_dict['train'].shuffle(seed=seed_for_shuffle)
-        train_dataset = PreprocessedIterableDataset(train_dataset, tokenizer, args.batch_size, args.max_length)
-        eval_dataset: datasets.Dataset = dataset_dict['validation'].shuffle(seed=seed_for_shuffle)
-        eval_dataset = PreprocessedIterableDataset(eval_dataset, tokenizer, args.batch_size, args.max_length)
-        # logger.info(f"Applying set_format")
-        # dataset_dict.set_format(type='torch', columns=["input_ids"])
+    logger.info("All good! Loading tokenizer now")
+    tokenizer = AutoTokenizer.from_pretrained("t5-base", model_max_length=args.max_length)
+    pad_idx = tokenizer.pad_token_id
+    logger.info("Tokenizer loaded")
 
-        # train_dataset = dataset_dict["train"]
-        # if args.seed != 0:
-        #     # this weird condition is due to backward compatibility
-        #     train_dataset = train_dataset.shuffle(seed=args.seed)
-
-        # eval_dataset = dataset_dict["validation"]
-
-        # ##############################
-        # Verify dataset
-        # logger.info("Checking datasets size")
-        # minimum_n_tokens = args.total_batch_size * args.num_training_steps
-        # dataset_n_tokens = len(train_dataset) * args.max_length
-        # if dataset_n_tokens < minimum_n_tokens:
-        #     raise ValueError(f"Dataset only has {dataset_n_tokens} tokens, but we need at least {minimum_n_tokens}")
-
-        logger.info("Loading dataset preprocessing args to check on seq_length")
-        with open(os.path.join(args.dataset_path, "args.json")) as f:
-            dataset_preprocessing_args = json.load(f)
-        # assert dataset_preprocessing_args["sequence_length"] == args.max_length
-    elif args.megatron_dataset_config is not None:
-        # NOTE: load_megatron_dataset can modify args inplace
-        # NOTE: train_dataset and eval_dataset do not exist in this if-branch
-        # NOTE: we will set iteration to non-zero below in .resume_from
-        start_iteration = 0
-        if args.model_revision is not None and args.model_revision.startswith("step"):
-            # This piece of code is VERY SPECIFIC to our experimental setup
-            # of reproducing Pythia training setup and is not useful in regular cases.
-            start_iteration = int(args.model_revision[4:])
-            logger.info(f"Starting from iteration {start_iteration} based on model revision {args.model_revision}")
-        train_loader, eval_loader, test_loader, tokenizer = load_megatron_dataset(args, world_size=world_size, start_iteration=start_iteration)
-        dataset_preprocessing_args = {"tokenizer": tokenizer.name_or_path}
+    logger.info("Loading Huggingface dataset from directory")
+    seed_for_shuffle = 42 
+    base_dir = args.base_dir
+    dataset_dict = datasets.load_dataset('json', 
+                            data_files = {'train' : [f'c4-train.0{idx:04d}-of-01024.json.gz' for idx in range(1024)],
+                                            'validation' : [f'c4-validation.0{idx:04d}-of-00008.json.gz' for idx in range(8)]},
+                        data_dir = base_dir, streaming = True)
+    train_dataset: datasets.Dataset = dataset_dict['train'].shuffle(seed=seed_for_shuffle)
+    train_dataset = PreprocessedIterableDataset(train_dataset, tokenizer, args.batch_size, args.max_length)
+    eval_dataset: datasets.Dataset = dataset_dict['validation'].shuffle(seed=seed_for_shuffle)
+    eval_dataset = PreprocessedIterableDataset(eval_dataset, tokenizer, args.batch_size, args.max_length)
 
     if args.model_config is not None:
         model_config = AutoConfig.from_pretrained(args.model_config)
@@ -640,7 +596,6 @@ def main(args):
     # Initialize wandb
     run_config = dict(vars(args))
     run_config.update({
-        "tokenizer": dataset_preprocessing_args["tokenizer"],
         "max_lr": run_config.pop("lr"),  # rename lr to max_lr to avoid conflicts with scheduler
         "total_params_M": n_total_params / 1_000_000,
         "trainable_params_M": n_trainable_params / 1_000_000,
@@ -650,7 +605,6 @@ def main(args):
         "model": model_config.to_dict(),
         "world_size": world_size,
         "device": str(device),
-        "dataset_preprocessing_args": dataset_preprocessing_args,
     })
 
     if global_rank == 0:
@@ -770,19 +724,10 @@ def main(args):
             if args.batch_size != _old_training_config["batch_size"]:
                 raise RuntimeError("Cannot resume from a checkpoint with a different batch size.")
 
-    if args.dataset_path is not None:
-        # Huggingface dataset to dataloader
-        # logger.info(f"Full training set size: {len(train_dataset)}")
-        train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=None, num_workers=args.workers)
-        eval_loader = torch.utils.data.DataLoader(eval_dataset, batch_size=None, num_workers=args.workers)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=None, num_workers=args.workers)
+    eval_loader = torch.utils.data.DataLoader(eval_dataset, batch_size=None, num_workers=args.workers)
 
-        _skip_batches = update_step * args.gradient_accumulation
-    else:
-        # Megatron dataset to dataloader
-        # Initialized earlier in the script
-        assert args.megatron_dataset_config is not None
-        assert train_loader is not None
-        assert eval_loader is not None
+    _skip_batches = update_step * args.gradient_accumulation
 
     # global steps and others are defined above
     update_time = time.time()

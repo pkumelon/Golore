@@ -1,8 +1,6 @@
-export DATA_PATH="./preprocessed_data/c4_en_t5-base_512"
 export CUDA_VISIBLE_DEVICES=0,1
 torchrun --nproc-per-node 2 --master_addr 127.0.0.1 --master_port 10002 torchrun_main.py \
     --model_config configs/llama_60m.json \
-    --dataset_path $DATA_PATH \
     --base_dir /data/datasets/c4_en \
     --autoresume True \
     --batch_size 128 \
