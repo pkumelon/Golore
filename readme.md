@@ -64,16 +64,14 @@ if isinstance(model, ReLoRaModel):
 
 ## Benchmark 1: Pre-Training LLaMA on C4 dataset
 
-First, preprocess the dataset.
-```sh
-python pretokenize.py \
-    --save_dir ./preprocessed_data \
-    --tokenizer t5-base \
-    --dataset c4 \
-    --dataset_config en \
-    --text_field text \
-    --sequence_length 512
+First, use the following code to download the dataset:
+```python
+import os
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+import huggingface_hub
+huggingface_hub.snapshot_download(repo_id = 'allenai/c4', repo_type = 'dataset', allow_patterns = 'en/c4-*', local_dir = '/data/datasets/c4_en')
 ```
+
 Second, you can use the following script to pretrain LLaMA model.
 
 ```sh
