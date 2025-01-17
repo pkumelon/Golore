@@ -248,10 +248,10 @@ class ReLoRaLinear(nn.Module):
             else: self.lora_B.weight.copy_(get_random_orthogonal_matrix(self.relora_config.r, WG.shape[1], dtype = WG.dtype))
             if isinstance(optimizer, torch.optim.SGD) and 'momentum_buffer' in optimizer.state[self.lora_A.weight]:
                 M = optimizer.state[self.lora_A.weight]['momentum_buffer'].detach().clone()
-                optimizer.state[self.lora_A.weight]['momentum_buffer'] =  (M @ B0) @ self.lora_B.weight.T
+                optimizer.state[self.lora_A.weight]['momentum_buffer'].copy_((M @ B0) @ self.lora_B.weight.T)
             elif isinstance(optimizer, AdamW) and 'exp_avg' in optimizer.state[self.lora_A.weight]:
                 exp_avg = optimizer.state[self.lora_A.weight]['exp_avg'].detach().clone()
-                optimizer.state[self.lora_A.weight]['exp_avg'] = (exp_avg @ B0) @ self.lora_B.weight.T
+                optimizer.state[self.lora_A.weight]['exp_avg'].copy_((exp_avg @ B0) @ self.lora_B.weight.T)
                 # exp_avg_sq = optimizer.state[self.lora_A.weight]['exp_avg_sq'].detach().clone()
                 # optimizer.state[self.lora_A.weight]['exp_avg_sq'] = (exp_avg_sq @ B0) @ self.lora_B.weight.T
 
@@ -265,10 +265,10 @@ class ReLoRaLinear(nn.Module):
             else: self.lora_A.weight.copy_(get_random_orthogonal_matrix(WG.shape[0], self.relora_config.r, dtype = WG.dtype))
             if isinstance(optimizer, torch.optim.SGD) and 'momentum_buffer' in optimizer.state[self.lora_B.weight]:
                 M = optimizer.state[self.lora_B.weight]['momentum_buffer'].detach().clone()
-                optimizer.state[self.lora_B.weight]['momentum_buffer'] =   self.lora_A.weight.T @ (A0 @ M)
-            elif isinstance(optimizer, AdamW) and 'exp_avg' in optimizer.state[self.lora_A.weight]:
-                exp_avg = optimizer.state[self.lora_A.weight]['exp_avg'].detach().clone()
-                optimizer.state[self.lora_A.weight]['exp_avg'] = self.lora_A.weight.T @ (A0 @ exp_avg)
+                optimizer.state[self.lora_B.weight]['momentum_buffer'].copy_(self.lora_A.weight.T @ (A0 @ M))
+            elif isinstance(optimizer, AdamW) and 'exp_avg' in optimizer.state[self.lora_B.weight]:
+                exp_avg = optimizer.state[self.lora_B.weight]['exp_avg'].detach().clone()
+                optimizer.state[self.lora_B.weight]['exp_avg'].copy_(self.lora_A.weight.T @ (A0 @ exp_avg))
                 # exp_avg_sq = optimizer.state[self.lora_A.weight]['exp_avg_sq'].detach().clone()
                 # optimizer.state[self.lora_A.weight]['exp_avg_sq'] = self.lora_A.weight.T @ (A0 @ exp_avg_sq)
             
