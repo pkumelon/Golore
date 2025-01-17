@@ -20,10 +20,6 @@ def check_args_torchrun_main(args):
             if k == "lr": v = float(v)
             setattr(args, k, v)
 
-    if args.megatron_dataset_config is not None:
-        if not os.path.exists(args.megatron_dataset_config):
-            raise ValueError(f"{args.megatron_dataset_config=} does not exist")
-
     if args.batch_size is None:
         raise ValueError("batch_size must be specified")
 
