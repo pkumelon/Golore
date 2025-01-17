@@ -138,6 +138,11 @@ def parse_args(args=None):
     parser.add_argument("--scale", type=float, default=1.0)
     parser.add_argument("--momentum", type=float, default=0.9)
     parser.add_argument("--dampening", type=float, default=0.9)
+    parser.add_argument(
+        "--with_tracking",
+        action="store_true",
+        help="Whether to enable experiment trackers for logging.",
+    )
 
     args = parser.parse_args(args)
 
@@ -223,7 +228,7 @@ def save_model_ddp(model, optimizer, scheduler, training_state_checkpoint, run_c
         }
         torch.save(optimizer_checkpoint, f"{save_dir}/optimizer.pt")
 
-        training_state_checkpoint["wandb_id"] = wandb.run.id
+        if args.with_tracking: training_state_checkpoint["wandb_id"] = wandb.run.id
         with open(f"{save_dir}/training_state.json", "w") as f:
             json.dump(training_state_checkpoint, f, indent=4)
 
@@ -380,7 +385,7 @@ def main(args):
     dist.barrier()  # guarantees none of the workers will read save_dir above here before it's created by rank 0
 
     # initialize wandb without config (it is passed later)
-    if global_rank == 0:
+    if global_rank == 0 and args.with_tracking:
         wandb.init(project="GoLore", tags=args.tags, id=wandb_id, resume="allow", notes=args.comment)
         args.run_name = wandb.run.name
         if args.save_dir is None:
@@ -393,7 +398,7 @@ def main(args):
     dist.barrier()  # guarantees that save_dir exists and wand initialized on rank 0
 
     # synchronize run name and save dir across all ranks
-    run_name = [wandb.run.name] if global_rank == 0 else [""]
+    run_name = [wandb.run.name] if global_rank == 0 and args.with_tracking else [""]
     dist.broadcast_object_list(run_name, src=0)
     run_name = run_name[0]
     args.run_name = run_name
@@ -533,9 +538,6 @@ def main(args):
         logger.info(f"tokens_seen_before: {tokens_seen_before}")
         logger.info(f"Will train for {args.num_training_steps - _update_step} update steps")
 
-        if args.megatron_dataset_config is not None:
-            train_loader.batch_sampler.start_iter = global_step
-
     params_after = sum(p.numel() for p in model.parameters())
 
     added_floats = params_after - params_before
@@ -569,7 +571,7 @@ def main(args):
             find_unused_parameters = True,
         )
     # ##############################
-    if args.wandb_watch and global_rank == 0:
+    if args.wandb_watch and args.with_tracking and global_rank == 0:
         _log_freq = 500
         logger.info(f"Tracking model gradients with wandb every {_log_freq} update steps")
         wandb.watch(model, log_freq=_log_freq)
@@ -607,7 +609,7 @@ def main(args):
         "device": str(device),
     })
 
-    if global_rank == 0:
+    if global_rank == 0 and args.with_tracking:
         wandb.config.update(run_config, allow_val_change=True)
         wandb.save(os.path.abspath(__file__), policy="now") # save current script
 
@@ -753,7 +755,7 @@ def main(args):
     logger.info(f"Performing evaluation at step {update_step}")
     total_loss, evaluated_on_tokens = evaluate_model(model, eval_loader, device, pad_idx = pad_idx)
 
-    if global_rank == 0:
+    if global_rank == 0 and args.with_tracking:
         wandb.log({
             "final_eval_loss": total_loss,
             "final_eval_tokens": evaluated_on_tokens,
@@ -792,7 +794,7 @@ def main(args):
         loss_info[1] += 1
         loss_info[2] += torch.isnan(loss).float()
 
-        if global_step == 0 and global_rank == 0:
+        if global_step == 0 and global_rank == 0 and args.with_tracking:
             # log loss without any optimization
             wandb.log({"loss": loss.item(), "update_step": 0}, step=0)
 
@@ -806,7 +808,7 @@ def main(args):
 
         if args.clip_grad_norm > 0:
             grad_norm = torch.nn.utils.clip_grad_norm_(trainable_params, args.clip_grad_norm, error_if_nonfinite=True)
-            if global_rank == 0:
+            if global_rank == 0 and args.with_tracking:
                 wandb.log({"grad_norm": grad_norm.item()}, step=global_step)
 
         # ##############################
@@ -852,7 +854,7 @@ def main(args):
         loss_info = torch.zeros_like(loss_info)
 
         if local_step > args.gradient_accumulation and update_step % args.save_every == 0:
-            current_model_directory = f"{args.save_dir}/model_{update_step}"
+            current_model_directory = f"{args.save_dir}/model_{update_step}_use_peft({args.use_peft})_optimizer({args.optimizer})_Golore({args.Golore})"
             logger.info(f"Saving model and optimizer to {current_model_directory}, update step {update_step}")
             training_state_checkpoint = {
                 "global_step": global_step,
@@ -881,7 +883,7 @@ def main(args):
             logger.info(f"Performing evaluation at step {update_step}")
             total_loss, evaluated_on_tokens = evaluate_model(model, eval_loader, device, pad_idx = pad_idx)
 
-            if global_rank == 0:
+            if global_rank == 0 and args.with_tracking:
                 wandb.log({
                     "final_eval_loss": total_loss,
                     "final_eval_tokens": evaluated_on_tokens,
@@ -896,7 +898,7 @@ def main(args):
         tokens_seen_before = tokens_seen
         batches_in_update = args.gradient_accumulation * world_size
 
-        if global_rank == 0:
+        if global_rank == 0 and args.with_tracking:
             wandb.log({
                 "loss": loss.item(),
                 "lr": lr,
@@ -915,7 +917,7 @@ def main(args):
                 for module in model.modules():
                     if isinstance(module, ReLoRaLinear):
                         all_scaling_factors.append(module.scaling.data.item())
-                wandb.log({"lora_scaling": torch.tensor(all_scaling_factors)}, step=global_step)
+                if args.with_tracking: wandb.log({"lora_scaling": torch.tensor(all_scaling_factors)}, step=global_step)
         update_time = time.time()
         if prof is not None: prof.step()
     else: # for-else statement
@@ -929,7 +931,7 @@ def main(args):
     logger.info("Training finished")
     if global_rank == 0: pbar.close()
 
-    current_model_directory = f"{args.save_dir}/model_{update_step}"
+    current_model_directory = f"{args.save_dir}/model_{update_step}_use_peft({args.use_peft})_optimizer({args.optimizer})_Golore({args.Golore})"
     if not os.path.exists(current_model_directory):
         logger.info(f"Saving model and optimizer to {current_model_directory}, update step {update_step}")
         training_state_checkpoint = {
@@ -962,7 +964,7 @@ def main(args):
         target_eval_tokens=100_000_000,
     )
 
-    if global_rank == 0:
+    if global_rank == 0 and args.with_tracking:
         wandb.log({
             "final_eval_loss": total_loss,
             "final_eval_tokens": evaluated_on_tokens,
@@ -978,7 +980,7 @@ def main(args):
             target_eval_tokens=-1,
         )
 
-        if global_rank == 0:
+        if global_rank == 0 and args.with_tracking:
             wandb.log({
                 "final_test_loss": total_loss,
                 "final_test_tokens": evaluated_on_tokens,
@@ -987,7 +989,7 @@ def main(args):
             )
             logger.info(f"Test loss: {total_loss}")
 
-    if global_rank == 0:
+    if global_rank == 0 and args.with_tracking:
         wandb.finish()
 
     logger.info("Script finished successfully")

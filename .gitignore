@@ -6,7 +6,7 @@
 *.csv
 *.zip
 
-test
+test*
 
 pt_data
 
