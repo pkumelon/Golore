@@ -48,9 +48,6 @@ from peft_pretraining.dataloader import SkipDataLoader, PreprocessedIterableData
 from peft_pretraining.modeling_llama import LlamaForCausalLM
 from peft_pretraining.modeling_pythia import GPTNeoXForCausalLM
 
-from peft_pretraining.megatron_dataset.arguments import NeoXArgs
-from peft_pretraining.megatron_dataset import data_utils as megatron_data_utils
-
 transformers.logging.set_verbosity_error()
 
 import peft_pretraining
@@ -121,7 +118,6 @@ def parse_args(args=None):
 
 
     parser.add_argument("--distributed_type", type=str, default="ddp", choices=["ddp"])
-    parser.add_argument("--profile", default=False, type=lambda x: x.lower() == "true")
     parser.add_argument("--autoresume", default=False, type=lambda x: x.lower() == "true")
     parser.add_argument("--comment", type=str, default=None, help="Wandb notes")
     parser.add_argument("--wandb_watch", default=False, type=lambda x: x.lower() == "true",
@@ -280,69 +276,6 @@ def save_model(model, *, optimizer, scheduler, training_state_checkpoint, run_co
         save_model_ddp(model, optimizer, scheduler, training_state_checkpoint, run_config, save_dir)
     else:
         raise ValueError(f"Unknown distributed type {distributed_type}")
-
-
-def load_megatron_dataset(args, world_size, start_iteration):
-    logger.info(f"Loading Megatron dataset arguments from {args.megatron_dataset_config}")
-    with open(args.megatron_dataset_config) as f:
-        dataset_config_yaml = yaml.safe_load(f)
-
-    dataset_config_yaml["global_num_gpus"] = world_size
-    dataset_config_yaml["train_micro_batch_size_per_gpu"] = args.batch_size
-    dataset_config_yaml["gradient_accumulation_steps"] = args.gradient_accumulation
-    dataset_config_yaml["train_batch_size"] = args.total_batch_size
-    dataset_config_yaml["num_workers"] = args.workers
-
-    if args.max_length != dataset_config_yaml["seq_length"]:
-        logger.warning(f"rags.max_length ({args.max_length}) does not match "
-                        f"seq_length ({dataset_config_yaml['seq_length']}) in the dataset config")
-        logger.warning(f"Overwriting max_length with seq_length")
-        args.max_length = dataset_config_yaml["seq_length"]
-    
-    if args.num_training_steps > dataset_config_yaml["train_iters"]:
-        logger.error(f"num_training_steps ({args.num_training_steps}) is greater than train_iters ({dataset_config_yaml['train_iters']})")
-        raise ValueError("num_training_steps must be less than train_iters")
-
-    tokenizer = Tokenizer.from_file(dataset_config_yaml["vocab_file"])
-
-    logger.info("*" * 40)
-    logger.info("Dataset arguments:")
-    for k, v in dataset_config_yaml.items():
-        logger.info(f"{k:30} {v}")
-    logger.info("*" * 40)
-    logger.info("Building Megatron dataset")
-    dataset_args = NeoXArgs.from_dict(dataset_config_yaml)
-
-    if dataset_args.iteration is None:
-        dataset_args.iteration = start_iteration
-
-    if dataset_args.train_batch_size != args.total_batch_size:
-        logger.error(f"megatron_dataset_args.train_batch_size ({dataset_args.train_batch_size}) "
-                        f"does not match total_batch_size ({args.total_batch_size})")
-        raise ValueError("megatron_dataset_args.train_batch_size must match total_batch_size")
-
-    train_loader, eval_loader, test_loader = megatron_data_utils.\
-        build_train_valid_test_dataloaders(neox_args=dataset_args)
-    logger.info("Megatron dataset built")
-    tokenizer.name_or_path = dataset_config_yaml["vocab_file"]
-    return train_loader, eval_loader, test_loader, tokenizer
-
-
-def maybe_make_profiler(args):
-    if not args.profile: return None
-    global_rank = dist.get_rank()
-    profiler_logging_dir = os.path.join(f"profiler_logs/{args.run_name}")
-    prof = torch.profiler.profile(
-        schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=2),
-        on_trace_ready=torch.profiler.tensorboard_trace_handler(profiler_logging_dir, worker_name=f"rank{global_rank}"),
-        record_shapes=True,
-        profile_memory=True,
-        with_stack=True,
-    )
-    print(f"Rank {global_rank} profiling results will be saved to {profiler_logging_dir}")
-    prof.start()
-    return prof
-
 
 def main(args):
     # seed all
@@ -745,8 +678,6 @@ def main(args):
     unwrapped_model = model
     if args.distributed_type == "ddp": unwrapped_model = model.module
 
-    prof = maybe_make_profiler(args)
-
     logger.info(f"Starting training at update step {update_step} with {args.num_training_steps - update_step} update steps")
     if global_rank == 0:
         # fix tqdm visual length to 80 so that the progress bar
@@ -919,12 +850,10 @@ def main(args):
                         all_scaling_factors.append(module.scaling.data.item())
                 if args.with_tracking: wandb.log({"lora_scaling": torch.tensor(all_scaling_factors)}, step=global_step)
         update_time = time.time()
-        if prof is not None: prof.step()
     else: # for-else statement
         print(f"Warning: reached the end of the dataset. Training stopped, {global_rank=}, {update_step=}")
         logger.warning("Reached the end of the dataset. Training stopped")
 
-    if prof is not None: prof.stop()
     # ##############################
     # END of training loop
     # ##############################
