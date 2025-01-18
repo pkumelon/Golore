@@ -139,7 +139,9 @@ def parse_args(args=None):
         action="store_true",
         help="Whether to enable experiment trackers for logging.",
     )
-
+    parser.add_argument("--num_extra_training_steps", type=int, default=0,
+                        help="Number of **extra update steps** to train for. "
+                             "Notice that gradient accumulation is taken into account.")
     args = parser.parse_args(args)
 
     args = args_utils.check_args_torchrun_main(args)
@@ -319,7 +321,7 @@ def main(args):
 
     # initialize wandb without config (it is passed later)
     if global_rank == 0 and args.with_tracking:
-        wandb.init(project="GoLore", tags=args.tags, id=wandb_id, resume="allow", notes=args.comment)
+        wandb.init(project="test", tags=args.tags, id=wandb_id, resume="allow", notes=args.comment)
         args.run_name = wandb.run.name
         if args.save_dir is None:
             args.save_dir = f"checkpoints/{wandb.run.name}"
@@ -682,7 +684,7 @@ def main(args):
     if global_rank == 0:
         # fix tqdm visual length to 80 so that the progress bar
         # doesn't jump around when changing from external display to laptop
-        pbar = tqdm(total=args.num_training_steps - update_step, desc="Update steps", ncols=80)
+        pbar = tqdm(total=args.num_training_steps + args.num_extra_training_steps - update_step, desc="Update steps", ncols=80)
     logger.info(f"Performing evaluation at step {update_step}")
     total_loss, evaluated_on_tokens = evaluate_model(model, eval_loader, device, pad_idx = pad_idx)
 
@@ -705,8 +707,8 @@ def main(args):
             continue
 
         if local_step == 1: logger.info(f"Starting first step")
-        if update_step >= args.num_training_steps:
-            logger.info(f"Reached max number of update steps (f{args.num_training_steps}). Stopping training.")
+        if update_step >= args.num_training_steps + args.num_extra_training_steps:
+            logger.info(f"Reached max number of update steps (f{args.num_training_steps + args.num_extra_training_steps}). Stopping training.")
             print(f"Rank {global_rank} stopping training.")
             break
         
@@ -768,7 +770,7 @@ def main(args):
 
         if loss_info[2] == 0:  # no NaNs, update model
             optimizer.step()
-            scheduler.step()
+            if update_step < args.num_training_steps: scheduler.step()
         else:
             logger.error(f"Nan detected in loss_info, {_loss=}, skipping update")
             n_skipped_batches += 1
