@@ -18,3 +18,4 @@ torchrun --nproc-per-node 2 --master_addr 127.0.0.1 --master_port 10002 torchrun
     --optimizer galore_adamw \
     --tags GaLore_60M \
     --num_extra_training_steps 5000 \
+    --with_tracking \

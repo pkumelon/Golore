@@ -204,6 +204,7 @@ def save_model_ddp(model, optimizer, scheduler, training_state_checkpoint, run_c
 
     if global_rank == 0:
         update_step = training_state_checkpoint["update_step"]
+        scheduler_step = training_state_checkpoint["scheduler_step"]
         os.makedirs(os.path.dirname(save_dir), exist_ok=True)
 
         _model = model.module
@@ -220,6 +221,7 @@ def save_model_ddp(model, optimizer, scheduler, training_state_checkpoint, run_c
             "optimizer": optimizer.state_dict(),
             "scheduler": scheduler.state_dict(),
             "update_step": update_step,
+            "scheduler_step": scheduler_step,
             "global_step": training_state_checkpoint["global_step"],
             "config": run_config,
             "dtype": args.dtype,
@@ -387,6 +389,7 @@ def main(args):
 
     global_step = 0
     update_step = 0
+    scheduler_step = 0
     tokens_seen = 0
     tokens_seen_before = 0
     n_lora_restarts = 0
@@ -405,13 +408,15 @@ def main(args):
                 _old_state = json.load(f)
             global_step = _old_state["global_step"]
             update_step = _old_state["update_step"]
+            scheduler_step = _old_state["scheduler_step"]
             tokens_seen = _old_state["tokens_seen"]
             tokens_seen_before = _old_state["tokens_seen_before"]
             logger.info(f"global_step       : {global_step}")
             logger.info(f"update_step       : {update_step}")
+            logger.info(f"scheduler_step    : {scheduler_step}")
             logger.info(f"tokens_seen       : {tokens_seen}")
             logger.info(f"tokens_seen_before: {tokens_seen_before}")
-            logger.info(f"Will train for {args.num_training_steps - update_step} update steps")
+            logger.info(f"Will train for {args.num_training_steps + args.num_extra_training_steps - update_step} update steps")
         else:
             logger.warning(f"Did not find training state in {args.warmed_up_model}, global step will start from zero")
         logger.info("*" * 40)
@@ -464,14 +469,16 @@ def main(args):
         # We do overwrite update_step here to correctly initialize the scheduler
         # which should start from warmed_up_model's update step or zero
         _update_step = _old_state["update_step"]
+        _scheduler_step = _old_state["scheduler_step"]
         tokens_seen = _old_state["tokens_seen"]
         tokens_seen_before = _old_state["tokens_seen_before"]
         n_lora_restarts = _old_state["n_lora_restarts"]
         logger.info(f"global_step       : {global_step}")
         logger.info(f"update_step       : {update_step}")
+        logger.info(f"scheduler_step    : {scheduler_step}")
         logger.info(f"tokens_seen       : {tokens_seen}")
         logger.info(f"tokens_seen_before: {tokens_seen_before}")
-        logger.info(f"Will train for {args.num_training_steps - _update_step} update steps")
+        logger.info(f"Will train for {args.num_training_steps + args.num_extra_training_steps - _update_step} update steps")
 
     params_after = sum(p.numel() for p in model.parameters())
 
@@ -637,19 +644,13 @@ def main(args):
     )
 
     if args.resume_from:
-        logger.info("Setting scheduler to the same state as in the checkpoint")
-        for _ in range(update_step):
-            scheduler.step()
-        logger.info(f"Scheduler state restored from {args.resume_from}")
-        # current lr
-        logger.info(f"Current lr is {optimizer.param_groups[0]['lr']}")
-
         if args.load_optimizer_state_on_resume:
             _optimizer_dir = args.resume_from
             optimizer_checkpoint = torch.load(os.path.join(_optimizer_dir, "optimizer.pt"), map_location="cpu")
             optimizer.load_state_dict(optimizer_checkpoint["optimizer"])
             scheduler.load_state_dict(optimizer_checkpoint["scheduler"])
             update_step = optimizer_checkpoint["update_step"]
+            scheduler_step = optimizer_checkpoint["scheduler_step"]
             global_step = optimizer_checkpoint["global_step"]
             logger.info(f"Optimizer and scheduler restored from {_optimizer_dir}")
 
@@ -660,6 +661,14 @@ def main(args):
                 _old_training_config = yaml.safe_load(f)
             if args.batch_size != _old_training_config["batch_size"]:
                 raise RuntimeError("Cannot resume from a checkpoint with a different batch size.")
+
+        logger.info("Setting scheduler to the same state as in the checkpoint")
+        
+        for _ in range(scheduler_step):
+            scheduler.step()
+        logger.info(f"Scheduler state restored from {args.resume_from}")
+        # current lr
+        logger.info(f"Current lr is {optimizer.param_groups[0]['lr']}")
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=None, num_workers=args.workers)
     eval_loader = torch.utils.data.DataLoader(eval_dataset, batch_size=None, num_workers=args.workers)
@@ -770,7 +779,9 @@ def main(args):
 
         if loss_info[2] == 0:  # no NaNs, update model
             optimizer.step()
-            if update_step < args.num_training_steps: scheduler.step()
+            if scheduler_step < args.num_training_steps - 1:
+                scheduler.step()
+                scheduler_step += 1
         else:
             logger.error(f"Nan detected in loss_info, {_loss=}, skipping update")
             n_skipped_batches += 1
@@ -792,6 +803,7 @@ def main(args):
             training_state_checkpoint = {
                 "global_step": global_step,
                 "update_step": update_step,
+                "scheduler_step": scheduler_step,
                 "tokens_seen": tokens_seen,
                 "tokens_seen_before": tokens_seen_before,
                 "n_lora_restarts": n_lora_restarts,
@@ -836,6 +848,7 @@ def main(args):
                 "loss": loss.item(),
                 "lr": lr,
                 "update_step": update_step,
+                "scheduler_step": scheduler_step,
                 "tokens_seen": tokens_seen,
                 "throughput_tokens": tokens_in_update / update_time,
                 "throughput_examples": args.total_batch_size / update_time,
@@ -868,6 +881,7 @@ def main(args):
         training_state_checkpoint = {
             "global_step": global_step,
             "update_step": update_step,
+            "scheduler_step": scheduler_step,
             "tokens_seen": tokens_seen,
             "tokens_seen_before": tokens_seen_before,
             "n_lora_restarts": n_lora_restarts,

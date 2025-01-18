@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES=2,3
+export CUDA_VISIBLE_DEVICES=0,1
 torchrun --nproc-per-node 2 --master_addr 127.0.0.2 --master_port 10028 torchrun_main.py \
     --model_config configs/llama_60m.json \
     --base_dir /data/datasets/c4_en \
@@ -15,8 +15,10 @@ torchrun --nproc-per-node 2 --master_addr 127.0.0.2 --master_port 10028 torchrun
     --save_every 10000 \
     --eval_every 500 \
     --save_dir /data/pretrained_models/Llama60M \
-    --optimizer adamw \
+    --optimizer golore_adamw \
     --rand_ratio 0.8 \
     --tags GoLore_60M_rand0.8 \
-    --use_peft True \
-    --Golore \
+    --num_extra_training_steps 5000 \
+    --with_tracking \
+    # --use_peft True \
+    # --Golore \
