@@ -629,13 +629,11 @@ def main(args):
     else:
         raise ValueError(f"Optimizer {args.optimizer} not supported")
 
-    scheduler_start_step = update_step
-    _scheduler_steps = args.num_training_steps - scheduler_start_step
-    logger.info(f"Scheduler will run for {_scheduler_steps} update steps")
+    logger.info(f"Scheduler will run for {args.num_training_steps} update steps")
     scheduler = training_utils.get_scheculer(
         optimizer=optimizer,
         scheduler_type=args.scheduler,
-        num_training_steps=_scheduler_steps,
+        num_training_steps=args.num_training_steps,
         warmup_steps=args.warmup_steps,
         min_lr_ratio=args.min_lr_ratio,
         cycle_length=args.cycle_length,
@@ -664,11 +662,11 @@ def main(args):
 
         logger.info("Setting scheduler to the same state as in the checkpoint")
         
-        for _ in range(scheduler_step):
-            scheduler.step()
-        logger.info(f"Scheduler state restored from {args.resume_from}")
-        # current lr
-        logger.info(f"Current lr is {optimizer.param_groups[0]['lr']}")
+    for _ in range(scheduler_step):
+        scheduler.step()
+    logger.info(f"Scheduler state restored from {args.resume_from}")
+    # current lr
+    logger.info(f"Current lr is {optimizer.param_groups[0]['lr']}")
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=None, num_workers=args.workers)
     eval_loader = torch.utils.data.DataLoader(eval_dataset, batch_size=None, num_workers=args.workers)
@@ -908,7 +906,7 @@ def main(args):
         model, eval_loader, device, pad_idx = pad_idx,
         target_eval_tokens=100_000_000,
     )
-
+    
     if global_rank == 0 and args.with_tracking:
         wandb.log({
             "final_eval_loss": total_loss,
