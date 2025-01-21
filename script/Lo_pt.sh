@@ -12,11 +12,11 @@ torchrun --nproc-per-node 2 --master_addr 127.0.0.1 --master_port 10002 torchrun
     --cycle_length 10000 \
     --warmup_steps 1000 \
     --num_training_steps 10000 \
-    --save_every 20000 \
+    --save_every 2000 \
     --eval_every 500 \
     --save_dir /data/pretrained_models/Llama60M \
     --optimizer galore_adamw \
     --tags GaLore_60M \
     --num_extra_training_steps 5000 \
-    --dtype float32 \
     --with_tracking \
+    # --dtype float32 \

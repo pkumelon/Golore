@@ -82,7 +82,7 @@ class ReLoRaModel(torch.nn.Module):
             if not any(target_key in module_name for target_key in target_modules_list):
                 continue
             
-            print('enable GaCoRe for weights in module: ', module_name)
+            print('enable Golore for weights in module: ', module_name)
 
             weight_data = module.weight.data if keep_original_weights else None
             bias_data = None

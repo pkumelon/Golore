@@ -323,7 +323,7 @@ def main(args):
 
     # initialize wandb without config (it is passed later)
     if global_rank == 0 and args.with_tracking:
-        wandb.init(project="test", tags=args.tags, id=wandb_id, resume="allow", notes=args.comment)
+        wandb.init(project="Golore", tags=args.tags, id=wandb_id, resume="allow", notes=args.comment)
         args.run_name = wandb.run.name
         if args.save_dir is None:
             args.save_dir = f"checkpoints/{wandb.run.name}"
