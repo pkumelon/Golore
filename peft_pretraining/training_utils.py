@@ -53,7 +53,7 @@ def initialize_fsdp(model, dtype):
     return model
 
 
-def get_scheculer(
+def get_scheduler(
     optimizer,
     *,
     scheduler_type,

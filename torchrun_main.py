@@ -636,7 +636,7 @@ def main(args):
         raise ValueError(f"Optimizer {args.optimizer} not supported")
 
     logger.info(f"Scheduler will run for {args.num_training_steps} update steps")
-    scheduler = training_utils.get_scheculer(
+    scheduler = training_utils.get_scheduler(
         optimizer=optimizer,
         scheduler_type=args.scheduler,
         num_training_steps=args.num_training_steps,
