@@ -142,6 +142,9 @@ def parse_args(args=None):
     parser.add_argument("--num_extra_training_steps", type=int, default=0,
                         help="Number of **extra update steps** to train for. "
                              "Notice that gradient accumulation is taken into account.")
+
+    parser.add_argument("--single_gpu", default=False, action="store_true")
+    
     args = parser.parse_args(args)
 
     args = args_utils.check_args_torchrun_main(args)
@@ -323,7 +326,7 @@ def main(args):
 
     # initialize wandb without config (it is passed later)
     if global_rank == 0 and args.with_tracking:
-        wandb.init(project="Golore", tags=args.tags, id=wandb_id, resume="allow", notes=args.comment)
+        wandb.init(project="GoLore", tags=args.tags, id=wandb_id, resume="allow", notes=args.comment)
         args.run_name = wandb.run.name
         if args.save_dir is None:
             args.save_dir = f"checkpoints/{wandb.run.name}"
@@ -362,8 +365,11 @@ def main(args):
                                             'validation' : [f'c4-validation.0{idx:04d}-of-00008.json.gz' for idx in range(8)]},
                         data_dir = base_dir, streaming = True)
     train_dataset: datasets.Dataset = dataset_dict['train'].shuffle(seed=seed_for_shuffle)
-    train_dataset = PreprocessedIterableDataset(train_dataset, tokenizer, args.batch_size, args.max_length)
     eval_dataset: datasets.Dataset = dataset_dict['validation'].shuffle(seed=seed_for_shuffle)
+    if not args.single_gpu:
+        train_dataset = datasets.distributed.split_dataset_by_node(train_dataset, rank=global_rank, world_size=world_size)
+        eval_dataset = datasets.distributed.split_dataset_by_node(eval_dataset, rank=global_rank, world_size=world_size)
+    train_dataset = PreprocessedIterableDataset(train_dataset, tokenizer, args.batch_size, args.max_length)
     eval_dataset = PreprocessedIterableDataset(eval_dataset, tokenizer, args.batch_size, args.max_length)
 
     if args.model_config is not None:
