@@ -269,8 +269,8 @@ class ReLoRaLinear(nn.Module):
             elif isinstance(optimizer, AdamW) and 'exp_avg' in optimizer.state[self.lora_B.weight]:
                 exp_avg = optimizer.state[self.lora_B.weight]['exp_avg'].detach().clone()
                 optimizer.state[self.lora_B.weight]['exp_avg'].copy_(self.lora_A.weight.T @ (A0 @ exp_avg))
-                # exp_avg_sq = optimizer.state[self.lora_A.weight]['exp_avg_sq'].detach().clone()
-                # optimizer.state[self.lora_A.weight]['exp_avg_sq'] = self.lora_A.weight.T @ (A0 @ exp_avg_sq)
+                # exp_avg_sq = optimizer.state[self.lora_B.weight]['exp_avg_sq'].detach().clone()
+                # optimizer.state[self.lora_B.weight]['exp_avg_sq'] = self.lora_A.weight.T @ (A0 @ exp_avg_sq)
             
             self.lora_B.weight.zero_()
             self.lora_B.requires_grad_(True)
