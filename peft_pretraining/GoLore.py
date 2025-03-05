@@ -207,7 +207,7 @@ class ReLoRaLinear(nn.Module):
                 weight_data = torch.zeros(out_features, in_features, device=device, dtype=dtype, requires_grad=False)
 
             if quantize is None:
-                self.weight = nn.Parameter(weight_data, requires_grad=False)
+                self.weight = nn.Parameter(weight_data, requires_grad=True)
 
         self.in_features = in_features
         self.out_features = out_features
@@ -227,8 +227,6 @@ class ReLoRaLinear(nn.Module):
             self.lora_A.requires_grad_(self.proj_type)
             nn.init.zeros_(self.lora_A.weight)
             nn.init.zeros_(self.lora_B.weight)
-            if not self.lora_only:
-                self.weight.requires_grad = False
 
 
     @torch.no_grad()
@@ -238,8 +236,8 @@ class ReLoRaLinear(nn.Module):
             return
 
         WG = self.weight.grad.detach().clone()
-        self.weight.grad.zero_()
-        self.weight.requires_grad = False
+        self.weight.grad = None
+        self.weight.requires_grad_(False)
         self.weight.addmm_(self.lora_A.weight, self.lora_B.weight, alpha = -self.scale)
 
         if self.proj_type:
@@ -280,7 +278,7 @@ class ReLoRaLinear(nn.Module):
     def forward(self, x: torch.Tensor):
         if self.relora_config.forward_type == True:
             if not self.weight.requires_grad:
-                self.weight.requires_grad = True
+                self.weight.requires_grad_(True)
                 if self.proj_type: self.lora_A.requires_grad_(False)
                 if not self.proj_type: self.lora_B.requires_grad_(False)
 
