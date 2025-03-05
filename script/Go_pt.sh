@@ -1,5 +1,4 @@
-export CUDA_VISIBLE_DEVICES=0,1
-torchrun --nproc-per-node 2 --master_addr 127.0.0.2 --master_port 10028 torchrun_main.py \
+torchrun --nproc-per-node 1 --master_addr 127.0.0.2 --master_port 10028 torchrun_main.py \
     --model_config configs/llama_60m.json \
     --base_dir /data/datasets/c4_en \
     --autoresume True \
