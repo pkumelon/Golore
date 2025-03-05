@@ -631,6 +631,9 @@ def main(args):
     elif args.optimizer.lower() == "fira_adamw":
         from peft_pretraining.fira.fira_adamw import AdamW
         optimizer = AdamW(param_groups, lr=args.lr, weight_decay=args.weight_decay)
+    elif args.optimizer.lower() == "I3S_adamw":
+        from peft_pretraining.I3S_torch.adamw import AdamW
+        optimizer = AdamW(param_groups, lr=args.lr, weight_decay=args.weight_decay)
 
     else:
         raise ValueError(f"Optimizer {args.optimizer} not supported")
