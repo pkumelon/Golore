@@ -124,7 +124,7 @@ def parse_args(args=None):
                         help="Enable wandb.watch (may make training unstable, but might be good for understanding gradients)")
     parser.add_argument("--skip_batches", default=None, type=str, help="Batch numbers to skip, separated by comma. E.g., 2003,2990,12309. Specifically, update_step numbers.")
 
-    parser.add_argument("--wandb_project", type=str, default=None)
+    parser.add_argument("--wandb_project", type=str, default='GoLore')
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--proj_type", type=str, default="std")
     parser.add_argument("--rank", type=int, default=128)
