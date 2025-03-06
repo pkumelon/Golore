@@ -567,24 +567,24 @@ def main(args):
         "weight_decay": args.weight_decay,
         "betas": (args.adam_beta1, args.adam_beta2),
     }
-    if 'lore' in args.optimizer.lower() or 'fira' in args.optimizer.lower():
-        # make parameters with "rank" to a single group, if param_name has "mlp" or "attn"
-        galore_params = []
-        target_modules_list = ["attn", "attention", "mlp"]
-        for module_name, module in model.named_modules():
-            if not isinstance(module, nn.Linear):
-                continue
+    # if 'lore' in args.optimizer.lower() or 'fira' in args.optimizer.lower():
+    # make parameters with "rank" to a single group, if param_name has "mlp" or "attn"
+    galore_params = []
+    target_modules_list = ["attn", "attention", "mlp"]
+    for module_name, module in model.named_modules():
+        if not isinstance(module, nn.Linear):
+            continue
 
-            if not any(target_key in module_name for target_key in target_modules_list):
-                continue
-            
-            print('enable Lore for weights in module: ', module_name)
-            galore_params.append(module.weight)
-        id_galore_params = [id(p) for p in galore_params]
-        # make parameters without "rank" to another group
-        regular_params = [p for p in model.parameters() if id(p) not in id_galore_params]
-        param_groups = [{'params': regular_params}, 
-                        {'params': galore_params, 'rank': args.rank, 'update_proj_gap': args.update_proj_gap, 'scale': args.scale, 'proj_type': args.proj_type, 'rand_epoch': args.rand_ratio * args.num_training_steps}]
+        if not any(target_key in module_name for target_key in target_modules_list):
+            continue
+        
+        print('enable Lore for weights in module: ', module_name)
+        galore_params.append(module.weight)
+    id_galore_params = [id(p) for p in galore_params]
+    # make parameters without "rank" to another group
+    regular_params = [p for p in model.parameters() if id(p) not in id_galore_params]
+    param_groups = [{'params': regular_params}, 
+                    {'params': galore_params, 'rank': args.rank, 'update_proj_gap': args.update_proj_gap, 'scale': args.scale, 'proj_type': args.proj_type, 'rand_epoch': args.rand_ratio * args.num_training_steps}]
         
     momentum = args.momentum
     dampening = args.dampening
@@ -631,7 +631,7 @@ def main(args):
     elif args.optimizer.lower() == "fira_adamw":
         from peft_pretraining.fira.fira_adamw import AdamW
         optimizer = AdamW(param_groups, lr=args.lr, weight_decay=args.weight_decay)
-    elif args.optimizer.lower() == "I3S_adamw":
+    elif args.optimizer.lower() == "i3s_adamw":
         from peft_pretraining.I3S_torch.adamw import AdamW
         optimizer = AdamW(param_groups, lr=args.lr, weight_decay=args.weight_decay)
 
