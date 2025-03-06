@@ -124,6 +124,7 @@ def parse_args(args=None):
                         help="Enable wandb.watch (may make training unstable, but might be good for understanding gradients)")
     parser.add_argument("--skip_batches", default=None, type=str, help="Batch numbers to skip, separated by comma. E.g., 2003,2990,12309. Specifically, update_step numbers.")
 
+    parser.add_argument("--wandb_project", type=str, default=None)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--proj_type", type=str, default="std")
     parser.add_argument("--rank", type=int, default=128)
@@ -326,7 +327,7 @@ def main(args):
 
     # initialize wandb without config (it is passed later)
     if global_rank == 0 and args.with_tracking:
-        wandb.init(project="GoLore", tags=args.tags, id=wandb_id, resume="allow", notes=args.comment)
+        wandb.init(project=args.wandb_project, tags=args.tags, id=wandb_id, resume="allow", notes=args.comment)
         args.run_name = wandb.run.name
         if args.save_dir is None:
             args.save_dir = f"checkpoints/{wandb.run.name}"
