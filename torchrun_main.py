@@ -408,7 +408,10 @@ def main(args):
         checkpoint_path = os.path.join(args.warmed_up_model, "pytorch_model.bin")  # !! won't work with sharded models
         if not os.path.exists(checkpoint_path):
             checkpoint_path = os.path.join(args.warmed_up_model, "model.safetensors")
-        model.load_state_dict(torch.load(checkpoint_path, map_location="cpu"), strict=True)
+            from transformers.modeling_utils import load_state_dict
+            model.load_state_dict(load_state_dict(checkpoint_path), strict=True)
+        else:
+            model.load_state_dict(torch.load(checkpoint_path, map_location="cpu"), strict=True)
         logger.info(f"Model successfully loaded (strict=True policy)")
 
         if os.path.exists(os.path.join(args.warmed_up_model, "training_state.json")):
@@ -465,10 +468,16 @@ def main(args):
         checkpoint_path = os.path.join(args.resume_from, "pytorch_model.bin")
         if not os.path.exists(checkpoint_path):
             checkpoint_path = os.path.join(args.resume_from, "model.safetensors")
-        if isinstance(model, ReLoRaModel):
-            model.wrapped_model.load_state_dict(torch.load(checkpoint_path, map_location="cpu"), strict=True)
+            from transformers.modeling_utils import load_state_dict
+            if isinstance(model, ReLoRaModel):
+                model.wrapped_model.load_state_dict(load_state_dict(checkpoint_path), strict=True)
+            else:
+                model.load_state_dict(load_state_dict(checkpoint_path), strict=True)
         else:
-            model.load_state_dict(torch.load(checkpoint_path, map_location="cpu"), strict=True)
+            if isinstance(model, ReLoRaModel):
+                model.wrapped_model.load_state_dict(torch.load(checkpoint_path, map_location="cpu"), strict=True)
+            else:
+                model.load_state_dict(torch.load(checkpoint_path, map_location="cpu"), strict=True)
 
         logger.info(f"Model successfully loaded (strict=True policy)")
 
